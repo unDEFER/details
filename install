@@ -1,0 +1,93 @@
+#!/bin/bash
+VERSION="1.4"
+echo -e "Script Installer \x1B[1;37mv$VERSION\x1B[0m"
+( which gettext >/dev/null 2>&1) || echo "WARNING! gettext not found. It is necessary for normal work of scripts." >&2
+
+usage()
+{
+    echo -e "usage: $ install [-h|--help] [-f|--force] [Install_Directory]"
+    echo -e "\x1B[1;37m'--force'\x1B[1;0m option useful for rewriting old configuration files"
+    exit 0
+}
+
+FORCE=0
+case "$1" in
+    '-h'|'--help')
+       usage
+       ;;
+    '-f'|'--force')
+       FORCE=1
+       shift
+       ;;
+esac
+
+[ -z "$2" ] || usage
+
+INSTALLDIR=${1:-"/usr/local"}
+INSTALLDIR=${INSTALLDIR%%/}
+echo -e "Installing to Directory: \x1B[1;34m\"$INSTALLDIR/\"\x1B[0m"
+
+Installbinary ()
+{
+    for i in $1/*; do
+        if [ -x "$i" ]; then
+            SCRIPT=${i##$1/}
+            echo -e "Installing Script \x1B[1;36m\"$SCRIPT\"\x1B[0m..."
+            cp "$i" "$INSTALLDIR/$i"
+            for j in share/locale/*; do
+                if [ -f $j/LC_MESSAGES/$SCRIPT.mo ]; then
+                    LNG=${j##share/locale/}
+                    if ( which iconv awk >/dev/null 2>/dev/null ) && [ -f /usr/share/locale/all_languages ]; then
+                        CLNG=`locale | awk -- '/^LC_MESSAGES=/ {L=substr ($0,14); print substr (L,0,match (L,"_")-1)}'`
+                        LLNG=`awk -- '/^\[/ {found=0}
+                                (found==1) && (/^Name=/ || /^Name\['$CLNG'\]=/) {LANG=substr($0,match($0,"=")+1)}
+                                /^\['$LNG'\]/ {found=1}
+                                END {print LANG}' /usr/share/locale/all_languages | iconv -f UTF-8 -t \`locale charmap\``
+                    fi
+                    echo -e "language package \x1B[1;33m\"${LLNG:-$LNG}\"\x1B[0m was found"
+                    mkdir -p "$INSTALLDIR/$j/LC_MESSAGES"
+		    cp "$j/LC_MESSAGES/$SCRIPT.mo" "$INSTALLDIR/$j/LC_MESSAGES/$SCRIPT.mo"
+                fi
+            done
+        fi
+    done
+}
+
+Installetc ()
+{
+    for i in etc/*; do
+        if [ -f "$i" ]; then
+            CFGfile=${i##etc/}
+            echo -e "Installing configuration file \x1B[1;32m\"$CFGfile\"\x1B[0m..."
+            if [ -f "/$i" ] && [[ "$FORCE" == "0" ]]; then
+	        echo -e "Old configure file was founded. It will not be rewritten"
+		echo -e "Use \x1B[1;37m'--force'\x1B[1;0m option to rewrite it"
+	    else
+	        cp "$i" /"$i"
+	    fi
+        fi
+    done	
+}
+
+Installinit ()
+{
+    [ -d /etc/init.d ] && INITDIR="/etc/init.d"
+    [ -d /etc/rc.d/init.d ] && INITDIR="/etc/rc.d/init.d"
+
+    [ -z "$INITDIR" ] && return 1
+    
+    for i in etc/init.d/*; do
+        if [ -x "$i" ]; then
+            INITfile=${i##etc/init.d/}
+            echo -e "Installing initialization script \x1B[1;35m\"$INITfile\"\x1B[0m..."
+	    cp "$i" "$INITDIR/$INITfile"
+	    awk -- "{sub(/INSTALLDIR=\"\/usr\/local\"/, \"INSTALLDIR=\\\"$INSTALLDIR\\\"\"); print > \"$INITDIR/$INITfile\"}" "$INITDIR/$INITfile"
+	    /sbin/chkconfig --add "$INITfile"
+        fi
+    done	
+}
+
+Installbinary bin
+Installbinary sbin
+Installetc
+Installinit

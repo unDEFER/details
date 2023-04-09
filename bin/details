@@ -1,0 +1,105 @@
+#!/bin/bash
+
+# @FunctionsInBash
+usage()
+{
+    # @ColorsInBash
+    echo -e "usage: $ details [-h|--help] <details directory> <src directory> <command>"
+    echo -e "\x1B[1;37m'list'\x1B[1;0m command shows full list of details"
+    echo -e "\x1B[1;37m'omitted'\x1B[1;0m command shows omitted details description"
+    echo -e "\x1B[1;37m'unused'\x1B[1;0m command shows list of described but unused details"
+    exit 0
+}
+
+# @CheckUtilities @ArgumentsInBash @FunctionsInBash
+checkutilities ()
+{
+    Mesg="$1"
+    shift
+    # @NumberOfArguments
+    while [ $# != 0  ]; do
+        if ( ! which "${1}" >/dev/null 2>&1 ); then
+            echo "Cannot find" \"$1\" "$Mesg"
+            return 1
+        fi
+        # @ShiftOfArguments
+        shift
+    done
+}
+
+checkutilities "It is neccessary to work." grep sort diff sed || exit 1
+
+# @CaseCommand @ArgumentsInBash
+case "$1" in
+    '-h'|'--help')
+       usage
+       ;;
+esac
+
+# @CheckEmptyString
+[ -z "$1" ] && usage
+[ -z "$2" ] && usage
+[ -z "$3" ] && usage
+
+DETAILS=$1
+SRC=$2
+# @DirectoryChecking
+[ ! -d "$DETAILS" ] && echo "\"$DETAILS\" is not directory"
+[ ! -d "$SRC" ] && echo "\"$SRC\" is not directory"
+
+# @FunctionsInBash
+list()
+{
+    # @Grep @Sort
+    grep -EIhr "^#" "$DETAILS" | grep -Eo "@\w+" | sort -u
+}
+
+# @FunctionsInBash
+used()
+{
+    # @Grep @Sort
+    grep -EIhor "@\w+" "$SRC" | sort -u
+
+}
+
+# @FunctionsInBash
+omitted()
+{
+    # @TmpDir
+    mkdir -p "/tmp/details"
+    # @RedirectingOutput
+    list > "/tmp/details/list"
+    used > "/tmp/details/used"
+    # @Diff @Grep @Sed
+    diff -u "/tmp/details/list" "/tmp/details/used" | grep "^+@" | sed -- 's/^\+//'
+}
+
+# @FunctionsInBash
+unused()
+{
+    # @TmpDir
+    mkdir -p "/tmp/details"
+    # @RedirectingOutput
+    list > "/tmp/details/list"
+    used > "/tmp/details/used"
+    # @Diff @Grep @Sed
+    diff -u "/tmp/details/used" "/tmp/details/list" | grep "^+@" | sed -- 's/^\+//'
+}
+
+# @CaseCommand
+case "$3" in
+    'list')
+       list
+       ;;
+    'omitted')
+       omitted
+       ;;
+    'unused')
+       unused
+       ;;
+    *)
+       echo "Unknown command \"$3\""
+       usage
+esac
+
+# Just example of @Undocumentated datail

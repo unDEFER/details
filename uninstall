@@ -1,0 +1,89 @@
+#!/bin/sh
+VERSION="1.3"
+echo -e "Script Uninstaller \x1B[1;37mv$VERSION\x1B[0m"
+
+usage()
+{
+       echo -e "usage: $ uninstall [-h|--help] [-f|--force] [Install_Directory]"
+       echo -e "\x1B[1;37m'--force'\x1B[0m option useful for removing changed configuration files"
+       exit 0
+}
+
+FORCE=0
+case "$1" in
+    '-h'|'--help')
+       usage
+       ;;
+    '-f'|'--force')
+       FORCE=1
+       shift
+       ;;
+esac
+
+[ -z "$2" ] || usage
+
+UNINSTALLDIR=${1:-"/usr/local"}
+UNINSTALLDIR=${UNINSTALLDIR%%/}
+echo -e "Uninstalling from Directory: \x1B[1;34m\"$UNINSTALLDIR/\"\x1B[0m"
+Uninstall ()
+{
+    for i in $1/*; do
+        if [ -x $i ]; then
+            SCRIPT=${i##$1/}
+            echo -e "Uninstalling Script \x1B[1;36m\"$SCRIPT\"\x1B[0m..."
+            rm -f $UNINSTALLDIR/$i
+            for j in share/locale/*; do
+                if [ -f $j/LC_MESSAGES/$SCRIPT.mo ]; then
+                    LNG=${j##share/locale/}
+                    if ( which iconv awk >/dev/null 2>/dev/null ) && [ -f /usr/share/locale/all_languages ]; then
+                        CLNG=`locale | awk -- '/^LC_MESSAGES=/ {L=substr ($0,14); print substr (L,0,match (L,"_")-1)}'`
+                        LLNG=`awk -- '/^\[/ {found=0}
+                                (found==1) && (/^Name=/ || /^Name\['$CLNG'\]=/) {LANG=substr($0,match($0,"=")+1)}
+                                /^\['$LNG'\]/ {found=1}
+                                END {print LANG}' /usr/share/locale/all_languages | iconv -f UTF-8 -t \`locale charmap\``
+                    fi
+                    echo -e "language package \x1B[1;33m\"${LLNG:-$LNG}\"\x1B[0m"
+                    rm -f $UNINSTALLDIR/$j/LC_MESSAGES/$SCRIPT.mo
+                fi
+            done
+        fi
+    done
+}
+
+Uninstalletc ()
+{
+    for i in etc/*; do
+        if [ -f $i ]; then
+            CFGfile=${i##etc/}
+            echo -e "Uninstalling configuration file \x1B[1;32m\"$CFGfile\"\x1B[0m..."
+	    if ( diff $i /$i >/dev/null 2>&1 || [[ "$FORCE" == "1" ]] );then
+	        rm -f /$i
+	    else
+                echo -e "File was modified. It will not be removed."
+		echo -e "Use \x1B[1;37m'--force'\x1B[0m option to remove it"
+	    fi	
+        fi
+    done	
+}
+
+Uninstallinit ()
+{
+    [ -d /etc/init.d ] && INITDIR="/etc/init.d"
+    [ -d /etc/rc.d/init.d ] && INITDIR="/etc/rc.d/init.d"
+
+    [ -z "$INITDIR" ] && return 1
+    
+    for i in etc/init.d/*; do
+        if [ -x "$i" ]; then
+            INITfile=${i##etc/init.d/}
+            echo -e "Uninstalling initialization script \x1B[1;35m\"$INITfile\"\x1B[0m..."
+	    /sbin/chkconfig --del "$INITfile"
+	    rm -f "$INITDIR/$INITfile"
+        fi
+    done	
+}
+
+Uninstall bin
+Uninstall sbin
+Uninstalletc
+Uninstallinit
